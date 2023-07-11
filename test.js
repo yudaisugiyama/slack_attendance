@@ -1,14 +1,16 @@
 // 書き込み処理
 function updateSheet(d, sheet){
   const lastRow = sheet.getLastRow();
-  
+
   const [date, time] = getTime(d);
   const name = getName(d);
   const status = d['parameter']['trigger_word'];
 
-  if (status === '記録提出') {
+  if (status === '記録') {
       // 記録提出の場合は勤務時間を計算する
       postSheet(name);
+  } else if (status === '保存') {
+      savePdf(name);
   } else {
       // 出勤履歴のシートに書き込み
       const out = [[date, time, name, status]];
@@ -21,7 +23,7 @@ function updateSheet(d, sheet){
 function getTime(d) {
   // JavaScriptのDateオブジェクトに変換
   const ts = d['parameter']['timestamp'];
-  var date = new Date(ts * 1000); 
+  var date = new Date(ts * 1000);
 
   // UTC時間から日本時間に変換する
   date.setHours(date.getHours());
@@ -74,7 +76,7 @@ function getSettings() {
     settings[key] = value;
   }
 
-  return settings;  
+  return settings;
 }
 
 // 個人のシートに書き込む
@@ -91,7 +93,7 @@ function postSheet(name) {
 
   // 全てのデータを取得
   var range = newSheet.getDataRange();
-  
+
   // データを消去
   range.clearContent();
 
@@ -100,22 +102,11 @@ function postSheet(name) {
   const setYear = settings['year'];
   const setMonth = settings['month'];
   out = calcTime(name, setYear, setMonth);
-  
+
   // 個人のシートに書き込み
   const lastRow = newSheet.getLastRow();
+  // out.splice(3, 0, ["\n"]); // 改行を挿入
   newSheet.getRange(lastRow + 1, 1, out.length, out[0].length).setValues(out);
-
-  // // 現在スプレッドシートが格納されているフォルダをエクスポート先に指定するためにIDを取得
-  // const parentFolder = DriveApp.getFileById(ssid).getParents();
-  // const folderid = parentFolder.next().getId();
-  
-  // // pdfに変換して取得
-  // const ssid = ss.getId();
-  // const pdf = ss.getAs('application/pdf').setName(name);
-
-  // // PDFをエクスポート
-  // DriveApp.getFolderById(folderid).createFile(pdf);
-  return;
 }
 
 function getDayOfWeek(year, month, day) {
@@ -131,6 +122,7 @@ function calcTime(name, setYear, setMonth) {
   var out = [];
   out.push(["出勤簿 令和", setYear.toString(), "年", setMonth.toString(), "月度", "", ""]);
   out.push(["株式会社", "会津", "コンピュータ", "サイエンス" ,"研究所", "氏名:", name.toString()]);
+  out.push(["\n", "\n","\n", "\n", "\n", "\n", "\n"]);
   out.push(["日", "曜日","開始時刻", "終了時刻", "除外時間", "労働時間", "備考"]);
   var startTime = null;
   var endTime = null;
@@ -218,6 +210,122 @@ function calcTime(name, setYear, setMonth) {
 }
 
 
+function savePdf(name){
+  //アクティブなスプレッドシートを取得する
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  //スプレッドシートIDを取得する
+  let ssId = ss.getId();
+
+  //PDFの保存先
+  let parentFolder = DriveApp.getFileById(ssId).getParents();
+  let folderId = parentFolder.next().getId();
+
+  // シートIDを取得する
+  // スプレッドシート内のすべてのシートを取得
+  var sheets = ss.getSheets();
+  var sheetIndex = 0;
+  // 指定した名前のシートを探す
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getName() === name) {
+      sheetIndex = i; // シートのインデックス（0から始まる）
+    }
+  }
+  let shId = ss.getSheets()[sheetIndex].getSheetId();
+
+  //★★★PDFのファイル名を入力してください★★★
+  //※ポイント: ファイル名が重複しないようにしましょう
+  let fileName = name;
+
+  addDecorativeBorder(name);
+  
+  //関数createPdfを実行し、PDFを作成して保存する
+  createPdf(folderId, ssId, shId, fileName);
+}
+
+//PDFを作成し指定したフォルダーに保存する関数
+//以下4つの引数を指定する必要がある
+//1: フォルダーID (folderId)
+//2: スプレッドシートID (ssId)
+//3: シートID (shId)
+//4: ファイル名 (fileName)
+function createPdf(folderId, ssId, shId, fileName){
+  //PDFを作成するためのベースとなるURL
+  let baseUrl = "https://docs.google.com/spreadsheets/d/"
+          +  ssId
+          + "/export?gid="
+          + shId;
+ 
+  //★★★自由にカスタマイズしてください★★★
+  //PDFのオプションを指定
+  let pdfOptions = "&exportFormat=pdf&format=pdf"
+              + "&size=A4" //用紙サイズ (A4)
+              + "&portrait=true"  //用紙の向き true: 縦向き / false: 横向き
+              + "&fitw=true"  //ページ幅を用紙にフィットさせるか true: フィットさせる / false: 原寸大
+              + "&top_margin=0.50" //上の余白
+              + "&right_margin=0.50" //右の余白
+              + "&bottom_margin=0.50" //下の余白
+              + "&left_margin=0.50" //左の余白
+              + "&horizontal_alignment=CENTER" //水平方向の位置
+              + "&vertical_alignment=TOP" //垂直方向の位置
+              + "&printtitle=false" //スプレッドシート名の表示有無
+              + "&sheetnames=false" //シート名の表示有無
+              + "&gridlines=true" //グリッドラインの表示有無
+              + "&fzr=false" //固定行の表示有無
+              + "&fzc=false" //固定列の表示有無;
+
+  //PDFを作成するためのURL
+  let url = baseUrl + pdfOptions;
+
+  //アクセストークンを取得する
+  let token = ScriptApp.getOAuthToken();
+
+  //headersにアクセストークンを格納する
+  let options = {
+    headers: {
+        'Authorization': 'Bearer ' +  token
+    }
+  };
+ 
+  //PDFを作成する
+  let blob = UrlFetchApp.fetch(url, options).getBlob().setName(fileName + '.pdf');
+
+  //PDFの保存先フォルダー
+  //フォルダーIDは引数のfolderIdを使用します
+  let folder = DriveApp.getFolderById(folderId);
+
+  //PDFを指定したフォルダに保存する
+  folder.createFile(blob);
+}
+
+function addDecorativeBorder(name) {
+  // var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+
+  // シートの全ての罫線を削除する
+  var range = sheet.getRange("A1:H99");
+  range.setBorder(false, false, false, false, false, false);
+
+  // グリッド線を非表示にする (PDF変換時に印刷されないようにするため)
+  sheet.setHiddenGridlines(true)
+
+  // 指定範囲の底辺に罫線を付与する
+  var range = sheet.getRange("A2:G2");
+  range.setBorder(false, false, true, false, false, false);
+
+  // 測定記録範囲に罫線を付与する
+  var lastRow = sheet.getLastRow();
+  var range = sheet.getRange("A4:G" + lastRow);
+  range.setBorder(true, true, true, true, true, true);
+
+  // 任意の幅で列を調整する
+  var columnWidths = [100, 150, 120, 80, 100, 120, 90]; // 各列の幅を指定
+  for (var i = 0; i < columnWidths.length; i++) {
+    sheet.setColumnWidth(i + 1, columnWidths[i]);
+  }
+}
+
+
 
 // メイン関数
 function doPost(e) {
@@ -226,10 +334,10 @@ function doPost(e) {
   // Slackからのデータを処理
   var data = JSON.stringify(e);
   data = JSON.parse(data);
-  
+
   // Outgoing Webhookで生成したトークンを入力
   const secret_token = 'bNO11I3pc0AE8JBaNzFzERLu';
-  
+
   // トークンで認証
   const token = data['parameter']['token'];
   if (token === secret_token) {
