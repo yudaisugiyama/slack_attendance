@@ -105,8 +105,8 @@ function postSheet(name) {
 
   // 個人のシートに書き込み
   const lastRow = newSheet.getLastRow();
-  // out.splice(3, 0, ["\n"]); // 改行を挿入
   newSheet.getRange(lastRow + 1, 1, out.length, out[0].length).setValues(out);
+  addDecorativeBorder(name);
 }
 
 function getDayOfWeek(year, month, day) {
@@ -121,7 +121,8 @@ function calcTime(name, setYear, setMonth) {
   const data = sheet.getDataRange().getValues();
   var out = [];
   out.push(["出勤簿 令和", setYear.toString(), "年", setMonth.toString(), "月度", "", ""]);
-  out.push(["株式会社", "会津", "コンピュータ", "サイエンス" ,"研究所", "氏名:", name.toString()]);
+  // out.push(["株式会社", "会津", "コンピュータ", "サイエンス" ,"研究所", "氏名:", name.toString()]);
+  out.push(["株式会社", "会津コンピュータサイエンス研究所", "", "" ,"", "氏名:", name.toString()]);
   out.push(["\n", "\n","\n", "\n", "\n", "\n", "\n"]);
   out.push(["日", "曜日","開始時刻", "終了時刻", "除外時間", "労働時間", "備考"]);
   var startTime = null;
@@ -147,7 +148,6 @@ function calcTime(name, setYear, setMonth) {
           endTime = new Date(`${date} ${time}`);
           totalHours += (endTime - startTime) / (1000 * 60 * 60);
           // その日の勤務時間を出力
-          const year = ("0" + (startTime.getFullYear())).slice(-2);
           const month = ("0" + (startTime.getMonth() + 1)).slice(-2);
           const day = ("0" + startTime.getDate()).slice(-2);
           const startHour = ("0" + startTime.getHours()).slice(-2);
@@ -158,7 +158,9 @@ function calcTime(name, setYear, setMonth) {
           const endMinute = ("0" + endTime.getMinutes()).slice(-2);
           var dayOfWeek = getDayOfWeek(setYear+2018, month-1, day);
           endTime = `${endHour}:${endMinute}`;
-          out.push([formattedDate.toString(), dayOfWeek, startTime.toString(), endTime.toString(), totalBreakTime.toFixed(1).toString(), totalHours.toFixed(1).toString(), ""]);
+          totalBreakTime = roundNumber(totalBreakTime);
+          var totalRoundHours = roundNumber(totalHours);
+          out.push([`${formattedDate}`, dayOfWeek, `${startTime}`, `${endTime}`, `${totalBreakTime}`, `${totalRoundHours}`, ""]);
           // 1階休憩開始/終了時刻をリセット
           breakStart1 = null;
           breakEnd1 = null;
@@ -204,11 +206,16 @@ function calcTime(name, setYear, setMonth) {
     }
   }
 
-  out.push(["合計", "", "", "", `${workDays}日`, `${totalMonthHours.toFixed(1)}`, ""]);
+  totalMonthHours = roundNumber(totalMonthHours);
+  out.push(["合計", "", "", "", `${workDays}日`, `${totalMonthHours}`, ""]);
 
   return out;
 }
 
+function roundNumber(number) {
+  var roundedNumber = Math.round(number * 2) / 2;
+  return roundedNumber.toFixed(1);
+}
 
 function savePdf(name){
   //アクティブなスプレッドシートを取得する
@@ -237,7 +244,7 @@ function savePdf(name){
   //※ポイント: ファイル名が重複しないようにしましょう
   let fileName = name;
 
-  addDecorativeBorder(name);
+  // addDecorativeBorder(name);
   
   //関数createPdfを実行し、PDFを作成して保存する
   createPdf(folderId, ssId, shId, fileName);
@@ -286,6 +293,8 @@ function createPdf(folderId, ssId, shId, fileName){
         'Authorization': 'Bearer ' +  token
     }
   };
+
+  addDecorativeBorder(fileName);
  
   //PDFを作成する
   let blob = UrlFetchApp.fetch(url, options).getBlob().setName(fileName + '.pdf');
@@ -302,12 +311,8 @@ function addDecorativeBorder(name) {
   // var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
 
-  // シートの全ての罫線を削除する
-  var range = sheet.getRange("A1:H99");
-  range.setBorder(false, false, false, false, false, false);
-
   // グリッド線を非表示にする (PDF変換時に印刷されないようにするため)
-  sheet.setHiddenGridlines(true)
+  sheet.setHiddenGridlines(true);
 
   // 指定範囲の底辺に罫線を付与する
   var range = sheet.getRange("A2:G2");
@@ -315,11 +320,11 @@ function addDecorativeBorder(name) {
 
   // 測定記録範囲に罫線を付与する
   var lastRow = sheet.getLastRow();
-  var range = sheet.getRange("A4:G" + lastRow);
+  var range = sheet.getRange("A4:G" + `${lastRow}`);
   range.setBorder(true, true, true, true, true, true);
 
   // 任意の幅で列を調整する
-  var columnWidths = [100, 150, 120, 80, 100, 120, 90]; // 各列の幅を指定
+  var columnWidths = [80, 40, 80, 80, 70, 70, 150]; // 各列の幅を指定
   for (var i = 0; i < columnWidths.length; i++) {
     sheet.setColumnWidth(i + 1, columnWidths[i]);
   }
@@ -336,7 +341,7 @@ function doPost(e) {
   data = JSON.parse(data);
 
   // Outgoing Webhookで生成したトークンを入力
-  const secret_token = 'bNO11I3pc0AE8JBaNzFzERLu';
+  const secret_token = 'bNO11I3pc0AE8JBaNzFzERLu'; // fix
 
   // トークンで認証
   const token = data['parameter']['token'];
